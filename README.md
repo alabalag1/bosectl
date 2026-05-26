@@ -159,7 +159,7 @@ sudo cp bmapctl-rust-linux-x86_64 /usr/local/bin/bmapctl
 git clone https://github.com/aaronsb/bosectl.git
 cd bosectl
 make test          # Run all tests (Python + Rust + C++; automatically installs macOS test deps and handles missing toolchains)
-make artifacts     # Build release binaries + SHA256SUMS
+make artifacts     # Build release binaries + SHA256SUMS (compiles arm64 & x86_64 for macOS, and also cross-compiles both for Linux if Docker is running)
 ```
 
 See `make help` for all targets.
