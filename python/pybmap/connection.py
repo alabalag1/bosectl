@@ -170,6 +170,10 @@ class BmapConnection:
         """Noise cancellation (current, max) tuple."""
         return self._get("cnc")
 
+    def audio_settings(self):
+        """Read the active mode’s noise control and immersive audio settings."""
+        return self._get("audio_settings")
+
     def eq(self):
         """EQ bands (list of EqBand)."""
         return self._get("eq")
@@ -337,7 +341,7 @@ class BmapConnection:
         """
         if not self.has_feature("audio_settings"):
             raise BmapError("Device does not support direct audio settings")
-        settings = self._get("audio_settings")
+        settings = self.audio_settings()
         feat = self._feature("audio_settings")
         builder = feat["builder"]
         self._setget("audio_settings", builder(

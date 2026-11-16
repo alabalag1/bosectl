@@ -8,7 +8,7 @@
 [![C++17](https://img.shields.io/badge/C++-17-f34b7d.svg)](cpp/)
 [![Platform: Linux / macOS](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-blue.svg)](#)
 
-**Control Bose headphones from Linux and macOS — no app, no cloud, no account.**
+**Control Bose headphones from Linux and macOS, with no cloud account required.**
 
 ![bosectl CLI](docs/media/screenshot.png)
 
@@ -141,6 +141,31 @@ git clone https://github.com/aaronsb/bosectl.git
 cd bosectl
 ./macOS_install.sh
 ```
+
+### Native macOS app
+
+Bose Control is a SwiftUI app for macOS 14 and later. It uses the same
+Bluetooth backend as the Python CLI. The dashboard shows battery and the
+active listening mode. Controls follow the connected model, with noise
+control, immersive audio, custom mode selection, and three-band EQ on
+QuietComfort Ultra Headphones (2nd Gen), and noise reduction on QC35 and QC35 II.
+
+With Xcode or the macOS command line tools and Python 3 installed, run:
+
+```bash
+make python-setup
+make macos-app
+open dist/BoseControl.app
+```
+
+Pair and connect your headphones in System Settings → Bluetooth. Allow
+Bluetooth access if macOS prompts, then use Refresh in the app. The app
+uses the local Python environment selected at build time. Set
+`BOSECTL_PYTHON` to the path of another Python interpreter with PyObjC and
+IOBluetooth installed to use that interpreter.
+
+To explore the controls without paired headphones, run
+`open -n dist/BoseControl.app --args --demo`.
 
 ### From Release Binaries (Linux)
 

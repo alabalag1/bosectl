@@ -5,7 +5,7 @@
         rust-test rust-build rust-publish \
         cpp-test cpp-build \
         integration \
-        artifacts release
+        artifacts release macos-app
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -90,6 +90,9 @@ lint: python-lint ## Lint all languages
 
 ARCH := $(shell uname -m)
 DIST = dist
+
+macos-app: ## Build the native macOS application
+	bash macos/build.sh
 
 artifacts: rust-build cpp-build ## Build release binaries with checksums
 	@mkdir -p $(DIST)
