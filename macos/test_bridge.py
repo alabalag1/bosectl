@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from bridge import read_device, update_device
+from bridge import apply_and_read, read_device, update_device
 from pybmap.errors import BmapTimeoutError
 
 
@@ -26,6 +26,28 @@ class Headphones:
 
 
 class BridgeTests(unittest.TestCase):
+    def test_update_reads_only_changed_setting(self):
+        device = Headphones()
+        previous = read_device(device)
+        device.battery = lambda: self.fail("read battery during ANR update")
+        device.sidetone = lambda: self.fail("read sidetone during ANR update")
+        snapshot, warning = apply_and_read(device, "anr", "low", previous)
+        self.assertEqual(snapshot["anr"], "low")
+        self.assertEqual(snapshot["battery"], 74)
+        self.assertEqual(snapshot["unavailable"], ["Sidetone"])
+        self.assertIsNone(warning)
+
+    def test_eq_verification_reuses_single_readback(self):
+        device = Headphones()
+        device.has_feature = lambda name: name == "eq"
+        device.set_eq = lambda *_: None
+        reads = iter([[SimpleNamespace(band_id=i, name=str(i), min_val=-10,
+                                       max_val=10, current=0) for i in range(3)]])
+        device.eq = lambda: next(reads)
+        snapshot, warning = apply_and_read(device, "eq", [1, 0, 0], {"battery": 74})
+        self.assertEqual([band["value"] for band in snapshot["eq"]], [0, 0, 0])
+        self.assertIn("confirm", warning)
+
     def test_qc35_reports_only_available_controls_and_read_failures(self):
         snapshot = read_device(Headphones())
         self.assertEqual(snapshot["battery"], 74)

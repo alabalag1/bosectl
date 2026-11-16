@@ -7,14 +7,19 @@ import pybmap
 from pybmap.devices import get_device
 
 
-def read_device(device):
-    snapshot = {
-        "model": device.device_info["name"],
-        "battery": device.battery(),
-        "unavailable": [],
-    }
+def read_device(device, *, fields=None, previous=None):
+    snapshot = dict(previous or {}, model=device.device_info["name"])
+    unavailable = list(snapshot.get("unavailable", []))
+    snapshot["unavailable"] = unavailable
+
+    if fields is None:
+        snapshot["battery"] = device.battery()
 
     def read(key, label, getter):
+        if fields is not None and key not in fields:
+            return
+        if label in unavailable:
+            unavailable.remove(label)
         try:
             value = getter()
             if value is not None:
@@ -23,7 +28,7 @@ def read_device(device):
         except pybmap.BmapError:
             pass
         snapshot[key] = None
-        snapshot["unavailable"].append(label)
+        unavailable.append(label)
 
     features = {
         "product_name": ("name", "Device name", "name"),
@@ -41,20 +46,24 @@ def read_device(device):
     if device.has_feature("voice_prompts"):
         read("prompts", "Voice prompts", lambda: device.prompts()[0])
     if device.has_feature("current_mode"):
-        modes = {entry["idx"]: name for name, entry in device.preset_modes.items()}
-        if device.has_feature("get_all_modes"):
-            read("profiles", "Custom modes", lambda: [
-                {"id": p.mode_idx, "name": p.name, "command": p.name}
-                for p in device.profiles()
-                if p.editable and p.configured and p.name and p.mode_idx not in modes
-            ])
-        snapshot["profiles"] = [
-            {"id": idx, "name": name.capitalize(), "command": name}
-            for idx, name in sorted(modes.items())
-        ] + (snapshot.get("profiles") or [])
+        if fields is None:
+            modes = {entry["idx"]: name for name, entry in device.preset_modes.items()}
+            if device.has_feature("get_all_modes"):
+                read("profiles", "Custom modes", lambda: [
+                    {"id": p.mode_idx, "name": p.name, "command": p.name}
+                    for p in device.profiles()
+                    if p.editable and p.configured and p.name and p.mode_idx not in modes
+                ])
+            snapshot["profiles"] = [
+                {"id": idx, "name": name.capitalize(), "command": name}
+                for idx, name in sorted(modes.items())
+            ] + (snapshot.get("profiles") or [])
         read("mode", "Active mode", device.mode_idx)
     if device.has_feature("audio_settings"):
-        read("audio", "Audio settings", lambda: device.audio_settings()._asdict())
+        def read_audio():
+            settings = device.audio_settings()
+            return settings._asdict() if settings is not None else None
+        read("audio", "Audio settings", read_audio)
     if device.has_feature("eq"):
         def read_eq():
             bands = sorted(device.eq(), key=lambda band: band.band_id)
@@ -93,12 +102,29 @@ def update_device(device, control, value):
         if len(value) != 3 or any(type(v) is not int or not -10 <= v <= 10 for v in value):
             raise ValueError("Expected three EQ values from −10 to +10")
         device.set_eq(*value)
-        # The library's band writes do not check individual acknowledgments.
-        bands = sorted(device.eq(), key=lambda band: band.band_id)
-        if [band.band_id for band in bands] != [0, 1, 2] or [b.current for b in bands] != value:
-            raise pybmap.BmapError("The headphones did not apply every EQ value.")
     else:
         getattr(device, method)(value)
+
+
+def apply_and_read(device, control, value, previous):
+    warning = None
+    try:
+        update_device(device, control, value)
+    except (pybmap.BmapError, ValueError) as error:
+        warning = str(error)
+    fields = {control}
+    if control == "mode":
+        fields.update(("audio", "eq"))
+    elif control in {"noise", "anc", "wind", "spatial"}:
+        fields = {"audio"}
+    snapshot = read_device(device, fields=fields if previous else None, previous=previous)
+    if control == "eq" and warning is None:
+        # EQ band writes in the backend do not check individual acknowledgments.
+        if [band["value"] for band in snapshot.get("eq") or []] != value:
+            warning = "Couldn’t confirm every EQ value on the headphones."
+    if warning is None and any(key in snapshot and snapshot[key] is None for key in fields):
+        warning = "Couldn’t read the updated setting. Use Refresh to retry."
+    return snapshot, warning
 
 
 def main():
@@ -117,12 +143,10 @@ def main():
         get_device(model)  # Validate the model before opening an RFCOMM channel.
         with pybmap.connect(mac=address, device_type=model) as device:
             warning = None
-            if request.get("control"):
-                try:
-                    update_device(device, request["control"], request["value"])
-                except (pybmap.BmapError, ValueError) as error:
-                    warning = str(error)
-            snapshot = read_device(device)
+            if control := request.get("control"):
+                snapshot, warning = apply_and_read(device, control, request["value"], request.get("previous"))
+            else:
+                snapshot = read_device(device)
         print(json.dumps({"snapshot": snapshot, "address": address,
                           "deviceType": model, "warning": warning}))
     except Exception as error:

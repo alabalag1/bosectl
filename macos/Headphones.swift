@@ -93,6 +93,7 @@ private struct BridgeRequest: Encodable, Sendable {
     var deviceType: String?
     var control: String?
     var value: SettingValue?
+    var previous: Headphones?
 }
 
 private struct BridgeReply: Decodable, Sendable {
@@ -159,11 +160,12 @@ final class HeadphoneStore: ObservableObject {
     }
 
     func update(_ control: String, _ value: SettingValue) {
-        guard headphones != nil, !isBusy else { return }
+        guard let headphones, !isBusy else { return }
         if demo {
             updateDemo(control, value)
         } else {
-            perform(.init(address: address, deviceType: deviceType, control: control, value: value))
+            perform(.init(address: address, deviceType: deviceType, control: control,
+                          value: value, previous: headphones))
         }
     }
 
